@@ -3,6 +3,8 @@
 .idea
 .vscode
 *.yml
+server.key
+server.crt
 
 logs
 dist

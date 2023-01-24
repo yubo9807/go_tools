@@ -31,8 +31,11 @@ func init() {
 	data, err := os.ReadFile(configFile)
 	if err != nil {
 		os.Create(configFile)
-		template := `https: false  # 开发中，暂不支持
-port: 9000
+		template := `https: false
+# 生成证书
+# openssl req -newkey rsa:2048 -nodes -keyout server.key -x509 -days 365 -out server.crt
+
+port: 9000  # 启动端口
 proxy:
   - prefix: "/"
     target: "http://hpyyb.cn"
@@ -58,9 +61,20 @@ func main() {
 	proxy := newMultipleHostsReverseProxy(slice)
 
 	port := ":" + strconv.Itoa(utils.Server.PortResult(config.Port))
-	fmt.Println("http://localhost" + port)
-	if err := http.ListenAndServe(port, proxy); err != nil {
-		fmt.Println(err.Error())
+	agreement := "http"
+	if config.Https {
+		agreement = "https"
+	}
+	fmt.Println(agreement + "://localhost" + port)
+
+	if config.Https {
+		if err := http.ListenAndServeTLS(port, "server.crt", "server.key", proxy); err != nil {
+			fmt.Println(err.Error())
+		}
+	} else {
+		if err := http.ListenAndServe(port, proxy); err != nil {
+			fmt.Println(err.Error())
+		}
 	}
 }
 

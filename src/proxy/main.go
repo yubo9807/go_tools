@@ -1,3 +1,5 @@
+// 服务代理
+// 我会生成一个 proxy.yml 的配置文件，在里面可以修改代理地址
 package main
 
 import (
@@ -25,13 +27,7 @@ type ConfigType struct {
 }
 
 var config ConfigType
-
-func init() {
-	configFile := "./proxy.yml"
-	data, err := os.ReadFile(configFile)
-	if err != nil {
-		os.Create(configFile)
-		template := `https: false
+var template = `https: false
 # 生成证书
 # openssl req -newkey rsa:2048 -nodes -keyout server.key -x509 -days 365 -out server.crt
 
@@ -43,6 +39,12 @@ proxy:
     target: "http://hicky.hpyyb.cn"
 
 `
+
+func init() {
+	configFile := "./proxy.yml"
+	data, err := os.ReadFile(configFile)
+	if err != nil {
+		os.Create(configFile)
 		os.WriteFile(configFile, []byte(template), 0777)
 		data, _ = os.ReadFile(configFile)
 	}

@@ -2,6 +2,7 @@
 // 此服务器对当前目录下的前端框架打包后的文件做了处理
 // 框架打包后的文件路由都由 js 控制
 // 所以，找不到相应的文件，则会去找 index.html，依然交给 js 处理
+// 另外，对前端框架多页面应用可进行配置，static.yml
 package main
 
 import (
@@ -25,9 +26,10 @@ var config = configType{
 	Port:   8000,
 	Public: "./",
 }
-var template = `port: 8000  # 服务端口
+var template = `
+port: 8000    # 服务端口
 public: './'  # 静态资源地址
-routes:  # 自定义路由，针对多页面应用
+routes:       # 自定义路由，针对多页面应用
   "/admin/": "/admin.html"  # 这里的地址会拼接 public
   "/www/": "/www.html"
 `
@@ -36,9 +38,8 @@ func init() {
 	configFile := "./static.yml"
 	data, err := os.ReadFile(configFile)
 	if err != nil {
-		os.Create(configFile)
-		os.WriteFile(configFile, []byte(template), 0777)
-		data, _ = os.ReadFile(configFile)
+		fmt.Println("多页面应用请新建 static.yml 进行配置：")
+		fmt.Println(template)
 	}
 
 	if err := yaml.Unmarshal([]byte(data), &config); err != nil {
@@ -64,30 +65,23 @@ func main() {
 
 	collect := make([]string, 0)
 
-	// 给目录下的每个文件夹都重置下文件访问规则
-	for _, file := range files {
-		path := "/" + file.Name()
-		if file.IsDir() {
-			collect = append(collect, path+"/")
-			http.HandleFunc(path+"/", handler(path))
-		}
-	}
-
 	// 给配置文件中的路由注册访问规则
 	for key := range config.Routes {
 		val, ok := config.Routes[key]
-
-		isRegister := false // 是否已经注册过
-		for _, val := range collect {
-			if config.Public+val == val {
-				isRegister = true
-			}
-		}
-
-		if ok && !isRegister { // 注册过路有会忽略掉
+		if ok {
+			collect = append(collect, key)
 			http.HandleFunc(key, func(w http.ResponseWriter, r *http.Request) {
 				http.ServeFile(w, r, config.Public+val)
 			})
+		}
+	}
+
+	// 给目录下的每个文件夹都重置下文件访问规则
+	for _, file := range files {
+		path := "/" + file.Name()
+		isRegister := utils.Slice.Includes(collect, path+"/")
+		if !isRegister && file.IsDir() {
+			http.HandleFunc(path+"/", handler(path))
 		}
 	}
 

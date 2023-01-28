@@ -10,17 +10,40 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+
+	"gopkg.in/yaml.v2"
 )
 
 type configType struct {
 	Port   int
 	Public string
+	Routes map[string]string
 }
 
 // 默认配置
 var config = configType{
 	Port:   8000,
 	Public: "./",
+}
+var template = `port: 8000  # 服务端口
+public: './'  # 静态资源地址
+routes:  # 自定义路由，针对多页面应用
+  "/admin/": "/admin.html"  # 这里的地址会拼接 public
+  "/www/": "/www.html"
+`
+
+func init() {
+	configFile := "./static.yml"
+	data, err := os.ReadFile(configFile)
+	if err != nil {
+		os.Create(configFile)
+		os.WriteFile(configFile, []byte(template), 0777)
+		data, _ = os.ReadFile(configFile)
+	}
+
+	if err := yaml.Unmarshal([]byte(data), &config); err != nil {
+		panic(err)
+	}
 }
 
 // 启动服务
@@ -39,14 +62,36 @@ func main() {
 		fmt.Println(err)
 	}
 
+	collect := make([]string, 0)
+
 	// 给目录下的每个文件夹都重置下文件访问规则
 	for _, file := range files {
 		path := "/" + file.Name()
 		if file.IsDir() {
+			collect = append(collect, path+"/")
 			http.HandleFunc(path+"/", handler(path))
 		}
 	}
 
+	// 给配置文件中的路由注册访问规则
+	for key := range config.Routes {
+		val, ok := config.Routes[key]
+
+		isRegister := false // 是否已经注册过
+		for _, val := range collect {
+			if config.Public+val == val {
+				isRegister = true
+			}
+		}
+
+		if ok && !isRegister { // 注册过路有会忽略掉
+			http.HandleFunc(key, func(w http.ResponseWriter, r *http.Request) {
+				http.ServeFile(w, r, config.Public+val)
+			})
+		}
+	}
+
+	// 追加端口
 	port := ":" + strconv.Itoa(utils.Server.PortResult(config.Port))
 	fmt.Println("http://localhost" + port)
 	if err := http.ListenAndServe(port, nil); err != nil {

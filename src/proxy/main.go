@@ -62,6 +62,7 @@ func main() {
 	}
 	proxy := newMultipleHostsReverseProxy(slice)
 
+	// 设置端口，占用后 ++
 	port := ":" + strconv.Itoa(utils.Server.PortResult(config.Port))
 	agreement := "http"
 	if config.Https {
@@ -70,16 +71,19 @@ func main() {
 	fmt.Println(agreement + "://localhost" + port)
 
 	if config.Https {
+		// 启动 https 服务
 		if err := http.ListenAndServeTLS(port, "server.crt", "server.key", proxy); err != nil {
 			fmt.Println(err.Error())
 		}
 	} else {
+		// 启动 http 服务
 		if err := http.ListenAndServe(port, proxy); err != nil {
 			fmt.Println(err.Error())
 		}
 	}
 }
 
+// 创建代理
 func newMultipleHostsReverseProxy(targets []*url.URL) *httputil.ReverseProxy {
 	director := func(req *http.Request) {
 		var target *url.URL

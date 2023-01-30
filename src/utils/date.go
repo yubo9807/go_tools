@@ -19,6 +19,7 @@ type DateObjType struct {
 	Second int
 }
 
+// 时间戳转结构体
 func (d *dateType) DateToObj(t time.Time) DateObjType {
 	return DateObjType{
 		Year:   t.Local().Year(),
@@ -30,12 +31,14 @@ func (d *dateType) DateToObj(t time.Time) DateObjType {
 	}
 }
 
+// 十位补全
 func (d *dateType) DateZeroize(num int) string {
 	str := "0" + strconv.Itoa(num)
 	length := len(str)
 	return str[length-2 : length]
 }
 
+// 时间格式化
 func (d *dateType) DateFormater(time time.Time, formater string) string {
 	if formater == "" {
 		formater = "YYYY-MM-DD hh:mm:ss"

@@ -5,7 +5,7 @@ type sliceType struct{}
 var Slice sliceType
 
 // 切片中是否包含
-func (s *sliceType) Includes(slice []string, value string) bool {
+func Includes[T comparable](slice []T, value T) bool {
 	isRegister := false
 	for _, val := range slice {
 		if val == value {

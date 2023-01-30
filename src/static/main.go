@@ -79,7 +79,7 @@ func main() {
 	// 给目录下的每个文件夹都重置下文件访问规则
 	for _, file := range files {
 		path := "/" + file.Name()
-		isRegister := utils.Slice.Includes(collect, path+"/")
+		isRegister := utils.Includes(collect, path+"/")
 		if !isRegister && file.IsDir() {
 			http.HandleFunc(path+"/", handler(path))
 		}

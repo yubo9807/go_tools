@@ -19,7 +19,6 @@ type ProxyType struct {
 	Prefix string
 	Target string
 }
-
 type ConfigType struct {
 	Https bool
 	Port  int

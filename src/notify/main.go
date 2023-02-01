@@ -1,4 +1,5 @@
 // 一个定时任务，在指定的时间通知一些消息
+// 通过配置 notify.yml 修改时间段提示
 package main
 
 import (
@@ -19,13 +20,11 @@ type NotifyType struct {
 	Title string
 	Text  string
 }
-
 type ConfigType struct {
 	Times map[string]NotifyType
 }
 
 var config ConfigType
-
 var template = `times:
   '09:00':
     title: '打卡打卡'

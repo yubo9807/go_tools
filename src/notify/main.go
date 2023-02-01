@@ -3,37 +3,54 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"time"
 
 	"command/src/utils"
 
 	"github.com/0xAX/notificator"
+	"gopkg.in/yaml.v2"
 )
 
 var notify *notificator.Notificator
 var record string
 
-type notifyType struct {
-	title string
-	text  string
+type NotifyType struct {
+	Title string
+	Text  string
 }
 
-var notifyMap = make(map[string]notifyType)
+type ConfigType struct {
+	Times map[string]NotifyType
+}
+
+var config ConfigType
+
+var template = `times:
+  '09:00':
+    title: '打卡打卡'
+  '11:30':
+    title: 'Go! Go! Go! 干饭干饭!'
+    text: '手里活儿停一下
+
+`
 
 func init() {
 	notify = notificator.New(notificator.Options{
 		AppName: "时间提醒",
 	})
-	notifyMap["09:00"] = notifyType{"打卡打卡", ""}
-	notifyMap["11:28"] = notifyType{"Go! Go! Go! 干饭干饭!", "手里活儿停一下"}
-	notifyMap["11:30"] = notifyType{"干饭了兄嘚!", ""}
-	notifyMap["14:00"] = notifyType{"继续摸鱼了，渔夫", ""}
-	notifyMap["17:00"] = notifyType{"差不多该吃饭了", ""}
-	notifyMap["18:00"] = notifyType{"下班下班，记得打卡", ""}
-	notifyMap["18:30"] = notifyType{"还不下班吗？再不走生痔疮了", ""}
-	notifyMap["19:00"] = notifyType{"这么拼，老板给加班费吗？", ""}
-	notifyMap["21:30"] = notifyType{"莫要造轮子了，头发快没了", ""}
-	notifyMap["23:00"] = notifyType{"这个点儿还不睡，妙！实在是妙", ""}
+
+	configFile := "./notify.yml"
+	data, err := os.ReadFile(configFile)
+	if err != nil {
+		os.Create(configFile)
+		os.WriteFile(configFile, []byte(template), 0777)
+		data, _ = os.ReadFile(configFile)
+	}
+
+	if err := yaml.Unmarshal([]byte(data), &config); err != nil {
+		panic(err)
+	}
 }
 
 func main() {
@@ -42,9 +59,9 @@ func main() {
 	for range timer.C {
 		nowDate := utils.Date.DateFormater(time.Now(), "hh:mm")
 		if record != nowDate {
-			val, ok := notifyMap[nowDate]
+			val, ok := config.Times[nowDate]
 			if ok {
-				notify.Push(val.title, val.text, "", notificator.UR_CRITICAL)
+				notify.Push(val.Title, val.Text, "", notificator.UR_CRITICAL)
 			}
 			record = nowDate
 		}

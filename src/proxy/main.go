@@ -63,11 +63,7 @@ func main() {
 
 	// 设置端口，占用后 ++
 	port := ":" + strconv.Itoa(utils.Server.PortResult(config.Port))
-	agreement := "http"
-	if config.Https {
-		agreement = "https"
-	}
-	fmt.Println(agreement + "://localhost" + port)
+	fmt.Println(utils.If(config.Https, "https", "http") + "://localhost" + port)
 
 	if config.Https {
 		// 启动 https 服务

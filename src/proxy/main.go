@@ -89,8 +89,6 @@ func newMultipleHostsReverseProxy(targets []*url.URL) *httputil.ReverseProxy {
 				req.URL.Scheme = target.Scheme
 				req.URL.Host = target.Host
 				req.Host = target.Host
-			} else {
-				fmt.Println("匹配不到任何相关代理地址")
 			}
 		}
 	}

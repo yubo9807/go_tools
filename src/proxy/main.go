@@ -9,8 +9,8 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
+	"regexp"
 	"strconv"
-	"strings"
 
 	"gopkg.in/yaml.v2"
 )
@@ -32,9 +32,9 @@ var template = `https: false
 
 port: 9000  # 启动端口
 proxy:
-  - prefix: "/"
+  - prefix: "^/"
     target: "http://hpyyb.cn"
-  - prefix: "/api"
+  - prefix: "^/api"
     target: "http://hicky.hpyyb.cn"
 
 `
@@ -81,18 +81,18 @@ func main() {
 // 创建代理
 func newMultipleHostsReverseProxy(targets []*url.URL) *httputil.ReverseProxy {
 	director := func(req *http.Request) {
-		var target *url.URL
 		for i, val := range config.Proxy {
-			if strings.HasPrefix(req.RequestURI, val.Prefix) {
-				target = targets[i]
-				continue
+			reg, _ := regexp.Compile(val.Prefix)
+			matched := reg.MatchString(req.RequestURI)
+			if matched {
+				target := targets[i]
+				req.URL.Scheme = target.Scheme
+				req.URL.Host = target.Host
+				req.Host = target.Host
 			} else {
-				target = targets[0]
+				fmt.Println("匹配不到任何相关代理地址")
 			}
 		}
-		req.URL.Scheme = target.Scheme
-		req.URL.Host = target.Host
-		req.Host = target.Host
 	}
 	return &httputil.ReverseProxy{Director: director}
 }

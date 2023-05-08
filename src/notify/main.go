@@ -28,9 +28,9 @@ var config ConfigType
 var template = `times:
   '09:00':
     title: '打卡打卡'
-  '11:30':
+  '11:28':
     title: 'Go! Go! Go! 干饭干饭!'
-    text: '手里活儿停一下
+    text:  '手里活儿停一下'
 
 `
 
@@ -47,8 +47,9 @@ func init() {
 		data, _ = os.ReadFile(configFile)
 	}
 
+	fmt.Println(notify)
 	if err := yaml.Unmarshal([]byte(data), &config); err != nil {
-		panic(err)
+		panic(err.Error())
 	}
 }
 

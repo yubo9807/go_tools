@@ -85,8 +85,14 @@ func main() {
 		}
 	}
 
+	port := ":"
+	args1 := utils.GetArgs(1)
+	if args1 != "" {
+		port += args1
+	} else {
+		port += strconv.Itoa(utils.Server.PortResult(config.Port))
+	}
 	// 追加端口
-	port := ":" + strconv.Itoa(utils.Server.PortResult(config.Port))
 	fmt.Println("http://localhost" + port)
 	if err := http.ListenAndServe(port, nil); err != nil {
 		fmt.Println(err.Error())

@@ -2,9 +2,6 @@ package main
 
 import (
 	"command/src/utils"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -18,35 +15,27 @@ import (
 )
 
 type configType struct {
-	Port     int
-	PathName string
-	LogsUrl  string
-	Commands []commandType
-}
-type commandType struct {
-	Repository string
-	Branch     string
-	Event      string
-	Sh         string
+	Port       int
+	PathName   string
+	LogsUrl    string
+	CommandUrl string `yaml:"commandUrl"`
+	DeployKey  string `yaml:"deployKey"`
 }
 
 // 默认配置
 var Config = configType{
-	Port:     3738,
-	PathName: "/deploy",
-	LogsUrl:  "logs/",
-	Commands: []commandType{},
+	Port:       3738,
+	PathName:   "/deploy",
+	LogsUrl:    "logs/",
+	CommandUrl: "",
+	DeployKey:  "",
 }
 var template = `
 port: 3738          # 服务端口
 pathName: "/deploy" # 请求路径
 logsUrl: "logs/"    # 日志路径
-commands:
-  -
-    repository: "practical"
-    branch: "main"
-		event: "push"
-		sh: "practical.sh"
+commandUrl: ""      # 执行命令目录
+deployKey: ""       # 部署秘钥
 `
 
 func init() {
@@ -74,77 +63,86 @@ func main() {
 }
 
 func handleFuncFunc(w http.ResponseWriter, r *http.Request) {
-	headerString := ""
-	for name, headers := range r.Header {
-		for _, h := range headers {
-			headerString += name + ": " + h + "\n"
+	defer func() {
+		if msg := recover(); msg != nil {
+			message := fmt.Sprintf("%v", msg)
+			fmt.Println(message)
+			errorLog(r, message)
+			m := map[string]interface{}{"code": 500, "message": message}
+			data, _ := json.Marshal(m)
+			w.Write([]byte(data))
 		}
+	}()
+
+	if r.Method != "POST" {
+		panic("Method not allowed")
+	}
+
+	// 校验部署秘钥
+	deployKey := r.Header.Get("Deploy-Key")
+	if deployKey != Config.DeployKey {
+		panic("DeployKey error")
 	}
 
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		w.Write([]byte(err.Error()))
-		return
+		panic(err)
 	}
 	defer r.Body.Close()
 
-	if r.Method != "POST" {
-		w.Write([]byte("Method not allowed"))
-		return
-	}
-	writeLog(headerString + "body: " + string(body))
-
 	bodyStruct := map[string]interface{}{}
 	if err := json.Unmarshal(body, &bodyStruct); err != nil {
-		w.Write([]byte(err.Error()))
-		return
+		panic(err)
 	}
 
-	repository := bodyStruct["repository"].(map[string]interface{})
-	query := utils.Find(Config.Commands, func(v commandType, i int) bool {
-		return v.Repository == repository["name"]
-	})
-	if query.Repository == "" {
-		w.Write([]byte("Not found config"))
-		return
+	type Params struct {
+		Command string `json:"command" binding:"required"`
 	}
-	if repository["default_branch"] != query.Branch || r.Header.Get("X-GitHub-Event") != query.Event {
-		w.Write([]byte("Error branch or event"))
-		return
+	params := Params{}
+	if err := json.Unmarshal(body, &params); err != nil {
+		panic(err)
 	}
 
-	bl := verifySignature(r.Header.Get("X-Hub-Signature-256"), string(body))
+	entries, err := os.ReadDir(Config.CommandUrl)
+	if err != nil {
+		panic(err)
+	}
 
-	go func() {
-		writeLog("verifySignature: " + strconv.FormatBool(bl))
-		result := execCmd(query.Sh)
-		writeLog("cmd: " + result)
-	}()
-	w.Write([]byte("ok"))
-}
+	// 找到对应的执行文件
+	commandFile := ""
+	for _, entry := range entries {
+		if params.Command+".sh" == entry.Name() {
+			commandFile = "./" + entry.Name()
+			break
+		}
+	}
 
-func verifySignature(payload string, signature string) bool {
-	// 创建一个基于SHA-256的新HMAC实例
-	mac := hmac.New(sha256.New, []byte("j1odi"))
-	mac.Write([]byte(payload))
-	expectedMAC := mac.Sum(nil)
+	if commandFile == "" {
+		panic("command not found")
+	}
 
-	// 解码GitHub发送的签名（不包含' sha256='前缀）
-	signature = signature[len("sha256="):]
-
-	// 使用恒定时间比较防止时序攻击
-	b, _ := hex.DecodeString(signature)
-	return hmac.Equal(expectedMAC, b)
-}
-
-// 执行脚本
-func execCmd(sh string) string {
-	cmd := exec.Command("sh", sh)
+	cmd := exec.Command("sh", commandFile)
 	buf, err := cmd.Output()
 	if err != nil {
-		return err.Error()
+		panic(err)
 	}
-	return string(buf)
+
+	cmdResult := string(buf)
+	writeLog("cmdResult: " + cmdResult)
+	m := map[string]interface{}{"code": 200, "message": cmdResult}
+	data, _ := json.Marshal(m)
+	w.Write(data)
+}
+
+// 错误日志记录
+func errorLog(r *http.Request, errStr string) {
+	headerString := "header:\n"
+	for name, headers := range r.Header {
+		for _, h := range headers {
+			headerString += "\t" + name + ": " + h + "\n"
+		}
+	}
+	writeLog("url: " + r.URL.Path + "\n" + headerString + "error: " + errStr)
 }
 
 // 写入日志

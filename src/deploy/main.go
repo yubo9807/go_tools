@@ -10,33 +10,37 @@ import (
 	"os"
 	"os/exec"
 	"strconv"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v2"
 )
 
 type configType struct {
-	Port       int
-	PathName   string
-	LogsUrl    string
-	CommandUrl string `yaml:"commandUrl"`
-	DeployKey  string `yaml:"deployKey"`
+	Port           int
+	PathName       string
+	LogDir         string
+	CommandDir     string `yaml:"commandDir"`
+	DeployKey      string `yaml:"deployKey"`
+	LogReserveTime int    `yaml:"logReserveTime"`
 }
 
 // 默认配置
 var Config = configType{
-	Port:       3738,
-	PathName:   "/deploy",
-	LogsUrl:    "logs/",
-	CommandUrl: ".",
-	DeployKey:  "",
+	Port:           3738,
+	PathName:       "/deploy",
+	CommandDir:     ".",
+	DeployKey:      "",
+	LogDir:         "logs/",
+	LogReserveTime: 7,
 }
 var template = `
 port: 3738          # 服务端口
 pathName: "/deploy" # 请求路径
-logsUrl: "logs/"    # 日志路径
-commandUrl: "."     # 执行命令目录
+commandDir: "."     # 执行命令目录
 deployKey: ""       # 部署秘钥
+logDir: "logs/"     # 日志路径
+logReserveTime: 7   # 日志保留时间(天)
 `
 
 func init() {
@@ -109,7 +113,7 @@ func handleFuncFunc(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 
-	entries, err := os.ReadDir(Config.CommandUrl)
+	entries, err := os.ReadDir(Config.CommandDir)
 	if err != nil {
 		panic(err)
 	}
@@ -180,11 +184,11 @@ func errorLog(r *http.Request, errStr string) {
 
 // 写入日志
 func writeLog(msg string) {
-	_, err := os.Stat(Config.LogsUrl)
+	_, err := os.Stat(Config.LogDir)
 	if err != nil {
-		os.MkdirAll(Config.LogsUrl, os.ModePerm)
+		os.MkdirAll(Config.LogDir, os.ModePerm)
 	}
-	filename := Config.LogsUrl + utils.Date.DateFormater(time.Now(), "YYYY-MM-DD") + ".log"
+	filename := Config.LogDir + utils.Date.DateFormater(time.Now(), "YYYY-MM-DD") + ".log"
 	file, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		fmt.Println(err)
@@ -192,4 +196,27 @@ func writeLog(msg string) {
 	}
 	defer file.Close()
 	file.WriteString(utils.Date.DateFormater(time.Now(), "YYYY-MM-DD hh:mm:ss") + "\n" + msg + "\n\n")
+	clearLogs()
+}
+
+// 清理日志
+func clearLogs() {
+	flag := time.Now().AddDate(0, 0, -Config.LogReserveTime).Unix()
+	entries, err := os.ReadDir(Config.LogDir)
+	if err != nil {
+		panic(err)
+	}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		if !strings.HasSuffix(entry.Name(), ".log") {
+			continue
+		}
+		name := strings.Split(entry.Name(), ".")[0]
+		t, _ := time.Parse("2006-01-02", name)
+		if t.Unix() < flag {
+			os.Remove(Config.LogDir + entry.Name())
+		}
+	}
 }

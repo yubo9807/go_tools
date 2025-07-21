@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"command/src/utils"
 	"encoding/json"
 	"fmt"
@@ -27,14 +28,14 @@ var Config = configType{
 	Port:       3738,
 	PathName:   "/deploy",
 	LogsUrl:    "logs/",
-	CommandUrl: "",
+	CommandUrl: ".",
 	DeployKey:  "",
 }
 var template = `
 port: 3738          # 服务端口
 pathName: "/deploy" # 请求路径
 logsUrl: "logs/"    # 日志路径
-commandUrl: ""      # 执行命令目录
+commandUrl: "."     # 执行命令目录
 deployKey: ""       # 部署秘钥
 `
 
@@ -66,22 +67,27 @@ func handleFuncFunc(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		if msg := recover(); msg != nil {
 			message := fmt.Sprintf("%v", msg)
-			fmt.Println(message)
 			errorLog(r, message)
-			m := map[string]interface{}{"code": 500, "message": message}
-			data, _ := json.Marshal(m)
-			w.Write([]byte(data))
+			http.Error(w, message, http.StatusInternalServerError)
 		}
 	}()
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
 
 	if r.Method != "POST" {
 		panic("Method not allowed")
 	}
 
 	// 校验部署秘钥
-	deployKey := r.Header.Get("Deploy-Key")
-	if deployKey != Config.DeployKey {
-		panic("DeployKey error")
+	if Config.DeployKey != r.Header.Get("Deploy-Key") {
+		panic("Deploy key error")
+	}
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		panic("Streaming unsupported")
 	}
 
 	body, err := io.ReadAll(r.Body)
@@ -109,29 +115,56 @@ func handleFuncFunc(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 找到对应的执行文件
-	commandFile := ""
+	command := ""
 	for _, entry := range entries {
 		if params.Command+".sh" == entry.Name() {
-			commandFile = "./" + entry.Name()
+			command = "./" + entry.Name()
 			break
 		}
 	}
-
-	if commandFile == "" {
-		panic("command not found")
+	if command == "" {
+		panic("Exec file not found")
 	}
 
-	cmd := exec.Command("sh", commandFile)
-	buf, err := cmd.Output()
-	if err != nil {
+	result := ""
+	stream := func(str string) {
+		result += str + "\n"
+		fmt.Fprintf(w, "data: %s\n\n", str)
+		flusher.Flush()
+	}
+	stream("Exec command: " + command)
+
+	cmd := exec.Command("sh", command)
+	stdout, _ := cmd.StdoutPipe()
+	stderr, _ := cmd.StderrPipe()
+
+	if err := cmd.Start(); err != nil {
 		panic(err)
 	}
 
-	cmdResult := string(buf)
-	writeLog("cmdResult: " + cmdResult)
-	m := map[string]interface{}{"code": 200, "message": cmdResult}
-	data, _ := json.Marshal(m)
-	w.Write(data)
+	// 实时读取 stdout
+	go func() {
+		scanner := bufio.NewScanner(stdout)
+		for scanner.Scan() {
+			stream(scanner.Text())
+		}
+	}()
+
+	// 实时读取 stderr
+	go func() {
+		scanner := bufio.NewScanner(stderr)
+		for scanner.Scan() {
+			stream(scanner.Text())
+		}
+	}()
+
+	// 等待命令执行完成
+	if err := cmd.Wait(); err != nil {
+		panic(err)
+	} else {
+		writeLog(result)
+		stream("Deploy successfully.")
+	}
 }
 
 // 错误日志记录

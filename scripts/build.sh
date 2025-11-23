@@ -1,4 +1,4 @@
-list=("ip" "notify" "static" "proxy" "file-urls")
+list=("ip" "notify" "static" "proxy" "codestat" "deploy")
 
 system="darwin"
 ext=""

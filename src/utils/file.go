@@ -1,45 +1,72 @@
 package utils
 
 import (
-	"fmt"
+	"io"
 	"os"
+	"path/filepath"
 )
 
-type fileType struct{}
-
-var File fileType
-
-func (f fileType) recursion(folder string, urlArr []string, prefix string) []string {
-	files, err := os.ReadDir(prefix + folder)
-	if err != nil {
-		fmt.Println(err, prefix+folder)
-		return urlArr
-	}
-	if folder != "./" {
-		prefix += folder + "/"
-	}
-	for _, file := range files {
-		if file.IsDir() {
-			arr := f.recursion(file.Name(), urlArr, prefix)
-			urlArr = append(urlArr, arr...)
-		} else {
-			urlArr = append(urlArr, prefix+file.Name())
-		}
-	}
-	return urlArr
+type FileItem struct {
+	Name     string     `json:"name"`
+	Path     string     `json:"path"`
+	Ext      string     `json:"ext"`
+	IsDir    bool       `json:"isDir"`
+	Size     int64      `json:"size"`
+	Time     int64      `json:"time"`
+	Children []FileItem `json:"children"`
 }
 
-// 获取文件夹下的所有文件路径
-func (f *fileType) GetFilesUrl(folder string) []string {
-	slice := make([]string, 0)
-	fileInfo, err := os.Stat(folder)
+func FileInfo(filename string) (FileItem, error) {
+	info := FileItem{}
+	file, err := os.Open(filename)
 	if err != nil {
-		return slice
+		return FileItem{}, err
 	}
+	defer file.Close()
 
-	if fileInfo.IsDir() { // 是目录
-		return f.recursion(folder, make([]string, 0), "")
-	} else { // 是文件
-		return append(slice, folder)
+	fileInfo, _ := file.Stat()
+	info.Name = fileInfo.Name()
+	info.IsDir = fileInfo.IsDir()
+	info.Path = filename
+	if !info.IsDir {
+		info.Ext = filepath.Ext(info.Name)
 	}
+	info.Size, _ = file.Seek(0, io.SeekEnd)
+	info.Time = fileInfo.ModTime().Unix()
+	info.Children = []FileItem{}
+	return info, nil
+}
+
+func FileCatalog(filename string, fn func(item *FileItem) bool) ([]FileItem, error) {
+	files, err := os.ReadDir(filename)
+	if err != nil {
+		return nil, err
+	}
+	list := []FileItem{}
+	for _, file := range files {
+		info, _ := file.Info()
+		name := info.Name()
+		path := filename + string(filepath.Separator) + name
+		isDir := info.IsDir()
+		ext := ""
+		if !isDir {
+			ext = filepath.Ext(name)
+		}
+		val := FileItem{
+			Name:     name,
+			Path:     path,
+			Ext:      ext,
+			IsDir:    isDir,
+			Size:     info.Size(),
+			Time:     info.ModTime().Unix(),
+			Children: []FileItem{},
+		}
+		bl := fn(&val)
+		if bl && isDir {
+			child, _ := FileCatalog(path, fn)
+			val.Children = child
+		}
+		list = append(list, val)
+	}
+	return list, nil
 }
